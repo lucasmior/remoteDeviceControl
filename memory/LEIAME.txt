@@ -1,0 +1,14 @@
+
+Compilacao:
+
+make
+
+Execucao:
+
+./memory
+
+Verificar o conteudo do arquivo de memoria:
+
+xxd memory.dat
+
+
