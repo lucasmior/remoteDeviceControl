@@ -28,7 +28,6 @@ struct neighbor
 	char ip[16];
 	char name[255];
 	time_t	lastAccess;
-
 }neighbor;
 
 struct sharedData
@@ -51,11 +50,10 @@ struct sharedData
 ////////////////////////////////////////
 void sendUdpCmd( char* servIP, int udpPort, char* echoString )
 {
-	int sock;							/* Socket descriptor */
+ 	int sock;							/* Socket descriptor */
 	int broadcast = 1;					/* Enable broadcast */
 	int echoStringLen;					/* Length of string to echo */
 	struct sockaddr_in echoServAddr;	/* Echo server addr */
-	struct sockaddr_in fromAddr;		/* Source addr of echo */
 
 	/* Create a datagram/UDP socket */
 	if( ( sock = socket( PF_INET, SOCK_DGRAM, IPPROTO_UDP ) ) < 0 )
@@ -90,29 +88,22 @@ void sendUdpCmd( char* servIP, int udpPort, char* echoString )
 		perror( "sendto" );
 		//exit( 1 );
 	}
-	
 	close(sock);
 }
 
-void updateServer( char* ip, char* name, struct sharedData* shared )
+void updateServer( struct neighbor n, struct sharedData* shared )
 {
 	pthread_mutex_lock( &shared->mutex );
-	for( int i = 0; i < shared->neigh.size( ); i++ )
+	for( unsigned int i = 0; i < shared->neigh.size( ); i++ )
 	{
-		if( strcmp( shared->neigh.at(i).ip, ip ) == 0 )
+		if( strcmp( shared->neigh.at(i).ip, n.ip ) == 0 )
 		{
-			strcpy( shared->neigh.at(i).name, name );
-			// TODO update the timestamp
-			shared->neigh.at(i).lastAccess = time( 0 );
+			strcpy( shared->neigh.at(i).name, n.name );
+			shared->neigh.at(i).lastAccess = n.lastAccess;
 			pthread_mutex_unlock( &shared->mutex );
 			return;
 		}
 	}
-	
-	struct neighbor	n;
-	strcpy( n.name, name );
-	strcpy( n.ip, ip );
-	n.lastAccess = time( 0 );
 	shared->neigh.push_back( n );
 
 	pthread_mutex_unlock( &shared->mutex );
@@ -157,7 +148,7 @@ void *update_function( void *arg )
 
 	while( 1 )
 	{
-		cout << "Waiting for cmd.. " << endl;
+		//cout << "Waiting for cmd.. " << endl;
 		/* Block until receive message from a client */
 		if( ( recvMsgSize = recvfrom( sock, echoBuffer, ECHOMAX, 0,
 					    			  (struct sockaddr *)&echoClntAddr,
@@ -169,16 +160,13 @@ void *update_function( void *arg )
 
 		echoBuffer[recvMsgSize] = '\0';
 
-		printf("Handling client %s\n", inet_ntoa( echoClntAddr.sin_addr ) );
-		printf("Message: %s\n", echoBuffer);
+		//printf("Handling client %s\n", inet_ntoa( echoClntAddr.sin_addr ) );
+		//printf("Message: %s\n", echoBuffer);
 
 		//update neigh
 		
 		char *cmd;
 		char *param;
-		char answer[256];
-		answer[0] = '\0';
-
 
 		cmd = strtok( echoBuffer, " " );
 		param = strtok( NULL, " " );
@@ -187,8 +175,8 @@ void *update_function( void *arg )
 		strcpy( n.name, param );
 		strcpy( n.ip , inet_ntoa( echoClntAddr.sin_addr ) );
 		n.lastAccess = time( 0 );
-		cout << "name is: " << n.name <<   endl
-			 << "ip is: " << n.ip << endl;
+		//cout << "name is: " << n.name <<   endl
+		//	 << "ip is: " << n.ip << endl;
 			
 		if( strcmp( cmd, "START" ) == 0 )
 		{
@@ -206,7 +194,7 @@ void *update_function( void *arg )
 		}
 		else if( strcmp( cmd, "HEARTBEAT" ) == 0 )
 		{
-			updateServer( n.ip, n.name, shared );	//change to struct
+			updateServer( n, shared );	//change to struct
 		}
 		else
 		{
@@ -247,6 +235,7 @@ void *heartbeat_function( void *arg )
 		sendUdpCmd( servIP, udpPort, echoString );
 		sleep( 10 );
 	}
+	return 0;
 }
 
 void *recvClientCommands( void *arg )
@@ -319,7 +308,7 @@ void *recvClientCommands( void *arg )
 
         /* Nesse ponto, um cliente ja conectou!
          * O socket clntSock contem a conexao com esse cliente! */
-        printf( "Handling client %s\n", inet_ntoa( echoClntAddr.sin_addr ) );
+        //printf( "Handling client %s\n", inet_ntoa( echoClntAddr.sin_addr ) );
 
         /* Essa funcao e' chamada para tratar a conexao com o cliente, a qual e' definida pelo socket clntSock */
     
@@ -430,16 +419,16 @@ void *recvClientCommands( void *arg )
     	{
 	    	strcpy( answer, "200 OK\n" );
     		pthread_mutex_lock( &shared->mutex );
-    		cout << "Hosts: " << endl;
+    		//cout << "Hosts: " << endl;
     		ostringstream buf;
     		buf << shared->neigh.size( );
     		
     		strcat( answer, buf.str( ).c_str( ) );
 	    	strcat( answer, "\n" );
     		
-    		for( int i = 0; i < shared->neigh.size( ); i++ )
+    		for( unsigned int i = 0; i < shared->neigh.size( ); i++ )
     		{
-    			cout << "IP: " << shared->neigh.at(i).ip << " name: " << shared->neigh.at(i).name << endl; 
+    			//cout << "IP: " << shared->neigh.at(i).ip << " name: " << shared->neigh.at(i).name << endl; 
 	    		strcat( answer, shared->neigh.at(i).ip );	//error here .xxx
 	    		strcat( answer, " " );
 	    		strcat( answer, shared->neigh.at(i).name );
@@ -450,7 +439,7 @@ void *recvClientCommands( void *arg )
 	    else
 	    {
 	    	strcpy( answer, "400 Not Found\n" );
-	    	cout << "Invalid Command" << endl;
+	    	//cout << "Invalid Command" << endl;
 	    }
 
 	    /* Envia a string recebida de volta ao cliente e recebe outra ate o final da transmissao */
@@ -462,7 +451,7 @@ void *recvClientCommands( void *arg )
             perror( "send" );
             exit( 1 );
         }
-       	if( send( clntSock, answer, strlen(answer), 0 ) != strlen(answer) )
+       	if( send( clntSock, answer, strlen(answer), 0 ) != (unsigned int)strlen(answer) )
         {
             perror( "send" );
             exit( 1 );
@@ -473,6 +462,7 @@ void *recvClientCommands( void *arg )
 
     /* Fecha o socket do servidor, mas nesse exemplo a execucao numa chegara ateh aqui. */
     close(servSock);
+	return 0;
 }
 
 void *timeout( void *arg )
@@ -482,26 +472,25 @@ void *timeout( void *arg )
 	while( 1 )
 	{
 		pthread_mutex_lock( &shared->mutex );
-		for( int i = 0; i < shared->neigh.size( ); i++ )
+		for( unsigned int i = 0; i < shared->neigh.size( ); i++ )
 		{
 			// timeout control
 			time_t now = time(0);
 			if( ( now - shared->neigh.at(i).lastAccess ) >= 30 )
 			{
-				cout << now << " " << shared->neigh.at(i).lastAccess << endl;
+				//cout << now << " " << shared->neigh.at(i).lastAccess << endl;
 				shared->neigh.erase( shared->neigh.begin( ) + i );	//remove the 'i' element
-				cout << "Removed!" << endl;
+				//cout << "Removed!" << endl;
 			}
 		}
 		pthread_mutex_unlock( &shared->mutex );
-
 		sleep( 1 );
 	}
+	return 0;
 }
 
 int main( int argc, char** argv )
 {
-
 	if( argc < 5 )    /* Testa se o numero de argumentos esta correto */
     {
         fprintf(stderr, "Usage: %s <name> <broadcast> <udp port> <tcp port>\n", argv[0] );
@@ -510,41 +499,12 @@ int main( int argc, char** argv )
 
 	pthread_t heartbeat, update, client, tm;
 	struct sharedData shared;
-	//debug
-	struct neighbor n;
-	
-	//todo add my ip at list
-	//question.. pode add o ip aos parametros
-
-	cout << time(0) << endl;
-	sleep(1);
-	cout << time(0) << endl;
-	sleep(2);
-	cout << time(0) << endl;
 
 	shared.mutex = PTHREAD_MUTEX_INITIALIZER;
 	strcpy( shared.name, argv[1] );
 	strcpy( shared.broadcast, argv[2] );
-	shared.tcpPort = atoi( argv[3] );
+	shared.udpPort = atoi( argv[3] );
 	shared.tcpPort = atoi( argv[4] );
-
-	strcpy( n.ip, "192.168.100.xxx" );
-	strcpy( n.name, "localhost" );
-	n.lastAccess = time( 0 );
-	shared.neigh.push_back( n );
-	strcpy( n.ip, "192.168.100.999" );
-	strcpy( n.name, "local" );
-	n.lastAccess = time( 0 );
-	shared.neigh.push_back( n );
-
-	cout << "Size: " << shared.neigh.size( ) << endl;
-
-	char* servIP;						/* IP addr of server */
-	unsigned short udpPort;				/* Echo server port */
-	char* echoString;
-
-	servIP 		 = argv[2];				// Broadcast ip, hard-coded value
-	udpPort = atoi( argv[3] );		 	// Server ports, hard-coded value
 
 	if( pthread_create( &heartbeat, NULL, heartbeat_function, &shared ) )
     {
@@ -572,6 +532,5 @@ int main( int argc, char** argv )
         fprintf( stderr, "Error joining thread\n" );
         return -1;
     }
-
 	return 0;
 }
