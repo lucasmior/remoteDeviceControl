@@ -88,7 +88,7 @@ void sendUdpCmd( char* servIP, int udpPort, char* echoString )
 		        sizeof (echoServAddr) ) != echoStringLen )
 	{
 		perror( "sendto" );
-		exit( 1 );
+		//exit( 1 );
 	}
 	
 	close(sock);
@@ -485,9 +485,12 @@ void *timeout( void *arg )
 		for( int i = 0; i < shared->neigh.size( ); i++ )
 		{
 			// timeout control
-			if( ( time( 0 ) - shared->neigh.at(i).lastAccess ) >= 30 )
+			time_t now = time(0);
+			if( ( now - shared->neigh.at(i).lastAccess ) >= 30 )
 			{
+				cout << now << " " << shared->neigh.at(i).lastAccess << endl;
 				shared->neigh.erase( shared->neigh.begin( ) + i );	//remove the 'i' element
+				cout << "Removed!" << endl;
 			}
 		}
 		pthread_mutex_unlock( &shared->mutex );
@@ -513,6 +516,11 @@ int main( int argc, char** argv )
 	//todo add my ip at list
 	//question.. pode add o ip aos parametros
 
+	cout << time(0) << endl;
+	sleep(1);
+	cout << time(0) << endl;
+	sleep(2);
+	cout << time(0) << endl;
 
 	shared.mutex = PTHREAD_MUTEX_INITIALIZER;
 	strcpy( shared.name, argv[1] );
@@ -522,10 +530,14 @@ int main( int argc, char** argv )
 
 	strcpy( n.ip, "192.168.100.xxx" );
 	strcpy( n.name, "localhost" );
+	n.lastAccess = time( 0 );
 	shared.neigh.push_back( n );
 	strcpy( n.ip, "192.168.100.999" );
 	strcpy( n.name, "local" );
+	n.lastAccess = time( 0 );
 	shared.neigh.push_back( n );
+
+	cout << "Size: " << shared.neigh.size( ) << endl;
 
 	char* servIP;						/* IP addr of server */
 	unsigned short udpPort;				/* Echo server port */
@@ -534,7 +546,7 @@ int main( int argc, char** argv )
 	servIP 		 = argv[2];				// Broadcast ip, hard-coded value
 	udpPort = atoi( argv[3] );		 	// Server ports, hard-coded value
 
-	if( pthread_create( &heartbeat, NULL, update_function, &shared ) )
+	if( pthread_create( &heartbeat, NULL, heartbeat_function, &shared ) )
     {
     	cout << "Error to creating thread heartbeat!" << endl;
         return -1;
