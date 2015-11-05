@@ -1,6 +1,6 @@
 CC=g++
 CFLAGS+=-lpthread
-CFLAGS+=-std=c++11
+#CFLAGS+=-std=c++11
 INCLUDE_PATH=inc
 
 NAME=server

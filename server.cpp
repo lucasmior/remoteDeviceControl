@@ -27,6 +27,8 @@ struct neighbor
 {
 	char ip[16];
 	char name[255];
+	time_t	lastAccess;
+
 }neighbor;
 
 struct sharedData
@@ -101,6 +103,7 @@ void updateServer( char* ip, char* name, struct sharedData* shared )
 		{
 			strcpy( shared->neigh.at(i).name, name );
 			// TODO update the timestamp
+			shared->neigh.at(i).lastAccess = time( 0 );
 			pthread_mutex_unlock( &shared->mutex );
 			return;
 		}
@@ -109,43 +112,11 @@ void updateServer( char* ip, char* name, struct sharedData* shared )
 	struct neighbor	n;
 	strcpy( n.name, name );
 	strcpy( n.ip, ip );
+	n.lastAccess = time( 0 );
 	shared->neigh.push_back( n );
 
 	pthread_mutex_unlock( &shared->mutex );
 	return;
-}
-
-void *heartbeat_function( void *arg )
-{
-	struct sharedData *shared = (struct sharedData*)arg;
-
-	char *servIP;					/* IP addr of server */
-	unsigned short udpPort;			/* Echo server port */
-
-	servIP 	= shared->broadcast; 	// Broadcast ip, hard-coded value
-	udpPort = shared->udpPort;	 	// Server ports, hard-coded value
-
-	char *echoString;				/* String to send to echo server */
-
-	pthread_mutex_lock( &shared->mutex );
-	echoString = (char*)malloc( 6 + strlen(shared->name) );
-	strcpy( echoString, "START " );
-	strcat( echoString, shared->name );
-	pthread_mutex_unlock( &shared->mutex );
-
-	sendUdpCmd( servIP, udpPort, echoString );
-
-	while( 1 )
-	{
-		pthread_mutex_lock( &shared->mutex );
-		echoString = (char*)malloc( 10 + strlen(shared->name) );
-		strcpy( echoString, "HEARTBEAT " );
-		strcat( echoString, shared->name );
-		pthread_mutex_unlock( &shared->mutex );
-
-		sendUdpCmd( servIP, udpPort, echoString );
-		sleep( 10 );
-	}
 }
 
 void *update_function( void *arg )
@@ -186,7 +157,6 @@ void *update_function( void *arg )
 
 	while( 1 )
 	{
-
 		cout << "Waiting for cmd.. " << endl;
 		/* Block until receive message from a client */
 		if( ( recvMsgSize = recvfrom( sock, echoBuffer, ECHOMAX, 0,
@@ -216,6 +186,7 @@ void *update_function( void *arg )
 		struct neighbor n;
 		strcpy( n.name, param );
 		strcpy( n.ip , inet_ntoa( echoClntAddr.sin_addr ) );
+		n.lastAccess = time( 0 );
 		cout << "name is: " << n.name <<   endl
 			 << "ip is: " << n.ip << endl;
 			
@@ -239,9 +210,42 @@ void *update_function( void *arg )
 		}
 		else
 		{
-			//nothing
+			//nothing, invalid cmd
 			;;	
 		}
+	}
+}
+
+void *heartbeat_function( void *arg )
+{
+	struct sharedData *shared = (struct sharedData*)arg;
+
+	char *servIP;					/* IP addr of server */
+	unsigned short udpPort;			/* Echo server port */
+
+	servIP 	= shared->broadcast; 	// Broadcast ip, hard-coded value
+	udpPort = shared->udpPort;	 	// Server ports, hard-coded value
+
+	char *echoString;				/* String to send to echo server */
+
+	pthread_mutex_lock( &shared->mutex );
+	echoString = (char*)malloc( 6 + strlen(shared->name) );
+	strcpy( echoString, "START " );
+	strcat( echoString, shared->name );
+	pthread_mutex_unlock( &shared->mutex );
+
+	sendUdpCmd( servIP, udpPort, echoString );
+
+	while( 1 )
+	{
+		pthread_mutex_lock( &shared->mutex );
+		echoString = (char*)malloc( 10 + strlen(shared->name) );
+		strcpy( echoString, "HEARTBEAT " );
+		strcat( echoString, shared->name );
+		pthread_mutex_unlock( &shared->mutex );
+
+		sendUdpCmd( servIP, udpPort, echoString );
+		sleep( 10 );
 	}
 }
 
@@ -471,6 +475,27 @@ void *recvClientCommands( void *arg )
     close(servSock);
 }
 
+void *timeout( void *arg )
+{
+	struct sharedData *shared = (struct sharedData*)arg;
+
+	while( 1 )
+	{
+		pthread_mutex_lock( &shared->mutex );
+		for( int i = 0; i < shared->neigh.size( ); i++ )
+		{
+			// timeout control
+			if( ( time( 0 ) - shared->neigh.at(i).lastAccess ) >= 30 )
+			{
+				shared->neigh.erase( shared->neigh.begin( ) + i );	//remove the 'i' element
+			}
+		}
+		pthread_mutex_unlock( &shared->mutex );
+
+		sleep( 1 );
+	}
+}
+
 int main( int argc, char** argv )
 {
 
@@ -480,7 +505,7 @@ int main( int argc, char** argv )
         exit(1);
     }
 
-	pthread_t heartbeat, update, client;
+	pthread_t heartbeat, update, client, tm;
 	struct sharedData shared;
 	//debug
 	struct neighbor n;
@@ -509,19 +534,24 @@ int main( int argc, char** argv )
 	servIP 		 = argv[2];				// Broadcast ip, hard-coded value
 	udpPort = atoi( argv[3] );		 	// Server ports, hard-coded value
 
-	//if( pthread_create( &heartbeat, NULL, update_function, &shared ) )
-    //{
-    //	cout << "Error to creating thread heartbeat!" << endl;
-    //    return -1;
-    //}
-    //if( pthread_create( &update, NULL, update_function, &shared ) )
-    //{
-    //	cout << "Error to creating thread update!" << endl;
-    //    return -1;
-    //}
+	if( pthread_create( &heartbeat, NULL, update_function, &shared ) )
+    {
+    	cout << "Error to creating thread heartbeat!" << endl;
+        return -1;
+    }
+    if( pthread_create( &update, NULL, update_function, &shared ) )
+    {
+    	cout << "Error to creating thread update!" << endl;
+        return -1;
+    }
 	if( pthread_create( &client, NULL, recvClientCommands, &shared ) )
     {
     	cout << "Error to creating thread client!" << endl;
+        return -1;
+    }
+    if( pthread_create( &tm, NULL, timeout, &shared ) )
+    {
+    	cout << "Error to creating thread timeout!" << endl;
         return -1;
     }
 
