@@ -65,19 +65,26 @@ int main(int argc, char *argv[])
 
     /* Recebe a mesma string de volta do servidor */
     totalBytesRcvd = 0;
-    printf("Received: ");
-    while (totalBytesRcvd < echoStringLen)
+    //printf("Received: ");
+    int size;
+    if( ( bytesRcvd = recv(sock, &size, sizeof(int), 0) ) <= 1 )
+    {
+        perror("recv");
+        exit(1);
+    }
+    totalBytesRcvd = 0;
+    while ( totalBytesRcvd < size )
     {
         /* Recebe dados do servidor ate o tamanho do buffer (menos 1 para deixar espaco para
            o '\0' terminador de string */
-        if ((bytesRcvd = recv(sock, echoBuffer, RCVBUFSIZE - 1, 0)) <= 0) {
+        if ((bytesRcvd = recv(sock, &echoBuffer[totalBytesRcvd], size, 0)) <= 0) {
             perror("recv");
             exit(1);
         }
         totalBytesRcvd += bytesRcvd;   /* Atualiza o total de bytes recebidos */
-        echoBuffer[bytesRcvd] = '\0';  /* Adiciona o terminador de string */
-        printf("%s", echoBuffer);            /* Imprime o conteudo do buffer recebido */
     }
+    echoBuffer[totalBytesRcvd] = '\0';  /* Adiciona o terminador de string */
+    printf("%s", echoBuffer);            /* Imprime o conteudo do buffer recebido */
 
     printf("\n");    /* Imprime o final de linha */
 

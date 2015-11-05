@@ -9,8 +9,9 @@ UDP_PORT=8899
 TCP_PORT=7070
 
 all:
-	$(CC) server.cpp -o server $(CFLAGS) -I $(INCLUDE_PATH)
+	$(CC) server.cpp src/memory.c -o server $(CFLAGS) -I $(INCLUDE_PATH)
 	gcc -o client client.c
+
 clean:
 	rm client
 	rm server
