@@ -6,9 +6,9 @@ Para compilar o programa, é necessário alterar o arquivo Makefile:
   - Caso não tenha c++11 disponivel na máquina, comente a linha CFLAGS+=-std=c++11
 
 Para executar o server:
-  - $ make
-  - $ make run
+  $ make
+  $ make run
 
 Para executar o client:
-  - $ make
-  - $ ./client <server_ip> <server_port> <msg>
+  $ make
+  $ ./client <server_ip> <server_port> <msg>
