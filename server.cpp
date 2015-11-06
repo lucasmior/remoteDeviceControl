@@ -321,65 +321,90 @@ void *recvClientCmd( void *arg )
     	else if( strcmp( cmd, "WRITE" ) == 0 || strcmp( cmd, "READ" ) == 0 )
     	{
     		char* type = strtok ( NULL, " " );
-    		int addr  = atoi( strtok ( NULL, " " ) );
-			char* value;
-			unsigned int word = 0;
-    		unsigned char byte = 0;
-				
-			strcpy( answer, "200 OK\n" );
-    		
-    		if( strcmp( cmd, "WRITE" ) == 0 )
+    		if( type != NULL )
     		{
-    			value = strtok ( NULL, " " );
-    			if( strcmp( type, "byte" ) == 0 )
-    			{
-		    		byte = atoi( value );
-					if( memory_write_byte( addr, &byte ) < 0 )
+				char *ad = strtok ( NULL, " " );
+				if( ad != NULL )
+				{
+					int addr  = atoi( ad );
+					char* value;
+					unsigned int word = 0;
+					unsigned char byte = 0;
+						
+					strcpy( answer, "200 OK\n" );
+					
+					if( strcmp( cmd, "WRITE" ) == 0 )
 					{
-						strcpy( answer, "500 Error\n" );
+						value = strtok ( NULL, " " );
+						if( value != NULL )
+						{
+							if( strcmp( type, "byte" ) == 0 )
+							{
+								byte = atoi( value );
+								if( memory_write_byte( addr, &byte ) < 0 )
+								{
+									strcpy( answer, "500 Error\n" );
+								}
+							}
+							else if( strcmp( type, "word" ) == 0 )
+							{
+								word = atoi( value );
+								if( memory_write_word( addr, &word ) < 0 )
+								{
+									strcpy( answer, "500 Error\n" );
+								}
+							}
+							else
+							{
+								strcpy( answer, "404 Invalid Address\0" );
+							}
+						}
+						else
+						{
+							strcpy( answer, "404 Invalid Address\0" );
+						}
+					}
+					else
+					{
+						if( strcmp( type, "byte" ) == 0 )
+						{
+							if( memory_read_byte( addr, &byte ) < 0 )
+							{
+								strcpy( answer, "500 Error\n" );
+							}
+							value = (char*)malloc( 4 );
+							sprintf( value, "%d", byte );		
+						} 
+						else if( strcmp( type, "word" ) == 0 )
+						{
+							if( memory_read_word( addr, &word ) < 0 )
+							{
+								strcpy( answer, "500 Error\n" );
+							}
+							value = (char*)malloc( 12 );
+							sprintf( value, "%d", word );	
+						}
+						else
+						{
+							strcpy( answer, "404 Invalid Address\0" );
+						}
+					}
+					if( value != NULL )
+					{
+						strcat( answer, type );
+						strcat( answer, " " );
+						strcat( answer, value );
 					}
 				}
-				else if( strcmp( type, "word" ) == 0 )
+				else 
 				{
-					word = atoi( value );
-					if( memory_write_word( addr, &word ) < 0 )
-					{
-						strcpy( answer, "500 Error\n" );
-					}
+					strcpy( answer, "404 Invalid Address\0" );
 				}
-				else
-				{
-					strcpy( answer, "404 Invalid Address\n" );
-				}
-    		}
-    		else
-    		{
-    			if( strcmp( type, "byte" ) == 0 )
-    			{
-					if( memory_read_byte( addr, &byte ) < 0 )
-					{
-						strcpy( answer, "500 Error\n" );
-					}
-					value = (char*)malloc( 4 );
-					sprintf( value, "%d", byte );		
-				} 
-				else if( strcmp( type, "word" ) == 0 )
-				{
-					if( memory_read_word( addr, &word ) < 0 )
-					{
-						strcpy( answer, "500 Error\n" );
-					}
-					value = (char*)malloc( 12 );
-					sprintf( value, "%d", word );	
-				}
-				else
-				{
-					strcpy( answer, "404 Invalid Address\n" );
-				}
-    		}
-			strcat( answer, type );
-			strcat( answer, " " );
-			strcat( answer, value );
+			}
+			else 
+			{
+				strcpy( answer, "404 Invalid Address\0" );
+			}
 		}
     	else if( strcmp( cmd, "SHUTDOWN" ) == 0 )
     	{
