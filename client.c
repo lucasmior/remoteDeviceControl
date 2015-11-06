@@ -12,7 +12,7 @@
 #include <string.h>     /* para memset() */
 #include <unistd.h>     /* para close() */
 
-#define RCVBUFSIZE 32   /* Tamanho do buffer de recebimento */
+#define RCVBUFSIZE 256   /* Tamanho do buffer de recebimento */
 
 int main(int argc, char *argv[])
 {
@@ -63,27 +63,13 @@ int main(int argc, char *argv[])
         exit(1);
     }
 
-    /* Recebe a mesma string de volta do servidor */
-    totalBytesRcvd = 0;
-    //printf("Received: ");
-    int size;
-    if( ( bytesRcvd = recv(sock, &size, sizeof(int), 0) ) <= 1 )
-    {
+    /* Recebe dados do servidor ate o tamanho do buffer (menos 1 para deixar espaco para
+       o '\0' terminador de string */
+    if ((bytesRcvd = recv(sock, echoBuffer, RCVBUFSIZE, 0)) <= 0) {
         perror("recv");
         exit(1);
     }
-    totalBytesRcvd = 0;
-    while ( totalBytesRcvd < size )
-    {
-        /* Recebe dados do servidor ate o tamanho do buffer (menos 1 para deixar espaco para
-           o '\0' terminador de string */
-        if ((bytesRcvd = recv(sock, &echoBuffer[totalBytesRcvd], size, 0)) <= 0) {
-            perror("recv");
-            exit(1);
-        }
-        totalBytesRcvd += bytesRcvd;   /* Atualiza o total de bytes recebidos */
-    }
-    echoBuffer[totalBytesRcvd] = '\0';  /* Adiciona o terminador de string */
+    echoBuffer[bytesRcvd] = '\0';  /* Adiciona o terminador de string */
     printf("%s", echoBuffer);            /* Imprime o conteudo do buffer recebido */
 
     printf("\n");    /* Imprime o final de linha */

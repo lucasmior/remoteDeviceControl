@@ -19,14 +19,15 @@
 
 using namespace std;
 
-#define ECHOMAX 255		/* Longest string to echo */
+#define ECHOMAX 256		/* Longest string to echo */
+#define IPMAX	16		
 #define MAXPENDING 5    /* Numero maximo de conexoes que podem ficar esperando serem aceitas */
 #define RCVBUFSIZE 32   /* Tamanho do buffer de recebimento */
 
 struct neighbor
 {
-	char ip[16];
-	char name[255];
+	char ip[IPMAX];
+	char name[ECHOMAX];
 	time_t	lastAccess;
 }neighbor;
 
@@ -34,20 +35,13 @@ struct sharedData
 {
 	int udpPort;
 	int tcpPort;
-	char ip[16];
-	char broadcast[16];
-	char name[255];
+	char ip[IPMAX];
+	char broadcast[IPMAX];
+	char name[ECHOMAX];
 	pthread_mutex_t mutex;
 	std::vector<struct neighbor> neigh;
 }sharedData;
 
-////////////////////////////////////////
-/// @brief 
-///
-///	@param
-///	@param
-///	@param
-////////////////////////////////////////
 void sendUdpCmd( char* servIP, int udpPort, char* echoString )
 {
  	int sock;							/* Socket descriptor */
@@ -70,13 +64,13 @@ void sendUdpCmd( char* servIP, int udpPort, char* echoString )
 
 	/* Construct the server addr structure */
 	memset( &echoServAddr, 0, sizeof(echoServAddr) );	/* Zero out structure */
-	echoServAddr.sin_family = AF_INET;	/* Internet addr family */
+	echoServAddr.sin_family = AF_INET;					/* Internet addr family */
 	echoServAddr.sin_addr.s_addr = inet_addr(servIP);	/* Server IP addr */
-	echoServAddr.sin_port = htons(udpPort);	/* Server port */
+	echoServAddr.sin_port = htons(udpPort);				/* Server port */
 
 	if( ( echoStringLen = strlen(echoString) ) > ECHOMAX )
  	{	/* Check input length */
-		printf( "Echo word too long" );
+		cout << "Echo word too long" << endl;
 		exit( 1 );
 	}
 
@@ -86,12 +80,11 @@ void sendUdpCmd( char* servIP, int udpPort, char* echoString )
 		        sizeof (echoServAddr) ) != echoStringLen )
 	{
 		perror( "sendto" );
-		//exit( 1 );
 	}
 	close(sock);
 }
 
-void updateServer( struct neighbor n, struct sharedData* shared )
+void updateHosts( struct neighbor n, struct sharedData* shared )
 {
 	pthread_mutex_lock( &shared->mutex );
 	for( unsigned int i = 0; i < shared->neigh.size( ); i++ )
@@ -110,7 +103,7 @@ void updateServer( struct neighbor n, struct sharedData* shared )
 	return;
 }
 
-void *update_function( void *arg )
+void *recvUdpCmd( void *arg )
 {
 	struct sharedData *shared = (struct sharedData*)arg;
 	
@@ -120,7 +113,9 @@ void *update_function( void *arg )
 	unsigned int cliAddrLen;			/* Length of incoming message */
 	char echoBuffer[ECHOMAX];			/* Buffer for echo string */
 	unsigned short udpPort;				/* Server port */
-	int recvMsgSize;					/* Size of received message */
+	int recvMsgSize;					/* Size of received message */	
+	char *cmd;
+	char *param;
 
 	udpPort = shared->udpPort;			/* First arg:  local port */
 
@@ -148,8 +143,6 @@ void *update_function( void *arg )
 
 	while( 1 )
 	{
-		//cout << "Waiting for cmd.. " << endl;
-		/* Block until receive message from a client */
 		if( ( recvMsgSize = recvfrom( sock, echoBuffer, ECHOMAX, 0,
 					    			  (struct sockaddr *)&echoClntAddr,
 					    			   &cliAddrLen)) < 0)
@@ -160,14 +153,6 @@ void *update_function( void *arg )
 
 		echoBuffer[recvMsgSize] = '\0';
 
-		//printf("Handling client %s\n", inet_ntoa( echoClntAddr.sin_addr ) );
-		//printf("Message: %s\n", echoBuffer);
-
-		//update neigh
-		
-		char *cmd;
-		char *param;
-
 		cmd = strtok( echoBuffer, " " );
 		param = strtok( NULL, " " );
 
@@ -175,13 +160,10 @@ void *update_function( void *arg )
 		strcpy( n.name, param );
 		strcpy( n.ip , inet_ntoa( echoClntAddr.sin_addr ) );
 		n.lastAccess = time( 0 );
-		//cout << "name is: " << n.name <<   endl
-		//	 << "ip is: " << n.ip << endl;
 			
 		if( strcmp( cmd, "START" ) == 0 )
 		{
 			pthread_mutex_lock( &shared->mutex );
-			//verify if dont has the same server at the list
 			shared->neigh.push_back( n );
 
 			//send a heartbeat go back
@@ -194,7 +176,7 @@ void *update_function( void *arg )
 		}
 		else if( strcmp( cmd, "HEARTBEAT" ) == 0 )
 		{
-			updateServer( n, shared );	//change to struct
+			updateHosts( n, shared );
 		}
 		else
 		{
@@ -204,7 +186,7 @@ void *update_function( void *arg )
 	}
 }
 
-void *heartbeat_function( void *arg )
+void *sendHeartbeat( void *arg )
 {
 	struct sharedData *shared = (struct sharedData*)arg;
 
@@ -238,7 +220,7 @@ void *heartbeat_function( void *arg )
 	return 0;
 }
 
-void *recvClientCommands( void *arg )
+void *recvClientCmd( void *arg )
 {
 	struct sharedData *shared = (struct sharedData*)arg;
 
@@ -293,7 +275,7 @@ void *recvClientCommands( void *arg )
 
     while( shutdown ) /* Executa para sempre */
     {
-    	memset( answer, 0, 256 );
+    	memset( answer, 0, ECHOMAX );
     	
     	/* Configura o tamanho da struct de endereco do cliente */
         clntLen = sizeof(echoClntAddr);
@@ -308,9 +290,6 @@ void *recvClientCommands( void *arg )
 
         /* Nesse ponto, um cliente ja conectou!
          * O socket clntSock contem a conexao com esse cliente! */
-        //printf( "Handling client %s\n", inet_ntoa( echoClntAddr.sin_addr ) );
-
-        /* Essa funcao e' chamada para tratar a conexao com o cliente, a qual e' definida pelo socket clntSock */
     
 	    /* Recebe uma mensagem do cliente */
 	    if( ( recvMsgSize = recv( clntSock, echoBuffer, RCVBUFSIZE, 0 ) ) < 0 )
@@ -326,7 +305,6 @@ void *recvClientCommands( void *arg )
 
     	if( strcmp( cmd, "NAME" ) == 0 )
     	{
-
    	    	strcpy( answer, "200 OK\n" );
     		param = strtok( NULL, " " );
     
@@ -335,14 +313,13 @@ void *recvClientCommands( void *arg )
     		{
     			strcpy( shared->name, param );
     		}
-    
-    		strcat( answer, shared->name );
+    	
+	    	strcat( answer, shared->name );
     		pthread_mutex_unlock( &shared->mutex );
        	}
 
     	else if( strcmp( cmd, "WRITE" ) == 0 || strcmp( cmd, "READ" ) == 0 )
     	{
-    		//Parse param..
     		char* type = strtok ( NULL, " " );
     		int addr  = atoi( strtok ( NULL, " " ) );
 			char* value;
@@ -359,7 +336,6 @@ void *recvClientCommands( void *arg )
 		    		byte = atoi( value );
 					if( memory_write_byte( addr, &byte ) < 0 )
 					{
-						cout << "Erro ao escrever byte na memoria." << endl;
 						strcpy( answer, "500 Error\n" );
 					}
 				}
@@ -368,13 +344,11 @@ void *recvClientCommands( void *arg )
 					word = atoi( value );
 					if( memory_write_word( addr, &word ) < 0 )
 					{
-						cout << "Erro ao escrever word na memoria." << endl;
 						strcpy( answer, "500 Error\n" );
 					}
 				}
 				else
 				{
-					cout << "Tipo invalido." << endl;
 					strcpy( answer, "404 Invalid Address\n" );
 				}
     		}
@@ -384,7 +358,6 @@ void *recvClientCommands( void *arg )
     			{
 					if( memory_read_byte( addr, &byte ) < 0 )
 					{
-						cout << "Erro ao ler byte da memoria." << endl;
 						strcpy( answer, "500 Error\n" );
 					}
 					value = (char*)malloc( 4 );
@@ -394,15 +367,13 @@ void *recvClientCommands( void *arg )
 				{
 					if( memory_read_word( addr, &word ) < 0 )
 					{
-						cout << "Erro ao ler word da memoria." << endl;
 						strcpy( answer, "500 Error\n" );
 					}
-					value = (char*)malloc( 4 );
+					value = (char*)malloc( 12 );
 					sprintf( value, "%d", word );	
 				}
 				else
 				{
-					cout << "Tipo invalido." << endl;
 					strcpy( answer, "404 Invalid Address\n" );
 				}
     		}
@@ -419,38 +390,30 @@ void *recvClientCommands( void *arg )
     	{
 	    	strcpy( answer, "200 OK\n" );
     		pthread_mutex_lock( &shared->mutex );
-    		//cout << "Hosts: " << endl;
-    		ostringstream buf;
-    		buf << shared->neigh.size( );
-    		
-    		strcat( answer, buf.str( ).c_str( ) );
+    		char buf[4];
+    		sprintf( buf, "%lu", shared->neigh.size( ) );
+    		strcat( answer, buf );
 	    	strcat( answer, "\n" );
     		
     		for( unsigned int i = 0; i < shared->neigh.size( ); i++ )
     		{
-    			//cout << "IP: " << shared->neigh.at(i).ip << " name: " << shared->neigh.at(i).name << endl; 
-	    		strcat( answer, shared->neigh.at(i).ip );	//error here .xxx
+	    		strcat( answer, shared->neigh.at(i).ip );
 	    		strcat( answer, " " );
 	    		strcat( answer, shared->neigh.at(i).name );
-	    		strcat( answer, "\n" );
+	    		if( i != shared->neigh.size( ) - 1 )
+	    		{
+		    		strcat( answer, "\n" );
+	    		}
     		}
     		pthread_mutex_unlock( &shared->mutex );
     	}
 	    else
 	    {
 	    	strcpy( answer, "400 Not Found\n" );
-	    	//cout << "Invalid Command" << endl;
 	    }
 
 	    /* Envia a string recebida de volta ao cliente e recebe outra ate o final da transmissao */
         /* Envia a mensagem de volta ao cliente */
-
-       	int size = strlen(answer);
-       	if( send( clntSock, &size, sizeof(int), 0 ) != sizeof(int) )
-        {
-            perror( "send" );
-            exit( 1 );
-        }
        	if( send( clntSock, answer, strlen(answer), 0 ) != (unsigned int)strlen(answer) )
         {
             perror( "send" );
@@ -506,17 +469,17 @@ int main( int argc, char** argv )
 	shared.udpPort = atoi( argv[3] );
 	shared.tcpPort = atoi( argv[4] );
 
-	if( pthread_create( &heartbeat, NULL, heartbeat_function, &shared ) )
+	if( pthread_create( &heartbeat, NULL, sendHeartbeat, &shared ) )
     {
     	cout << "Error to creating thread heartbeat!" << endl;
         return -1;
     }
-    if( pthread_create( &update, NULL, update_function, &shared ) )
+    if( pthread_create( &update, NULL, recvUdpCmd, &shared ) )
     {
     	cout << "Error to creating thread update!" << endl;
         return -1;
     }
-	if( pthread_create( &client, NULL, recvClientCommands, &shared ) )
+	if( pthread_create( &client, NULL, recvClientCmd, &shared ) )
     {
     	cout << "Error to creating thread client!" << endl;
         return -1;
